@@ -9,6 +9,7 @@ fn gen(ast: at, indent: i64) -> String {
         at::Float{value} => format!("{}{}", c_indent, value),
         at::Bool{value} => format!("{}{}", c_indent, if value=="true" { "True" } else { "False" }),
         at::String{value} => format!("{}{}", c_indent, value),
+        at::Ident{value} => format!("{}{}", c_indent, value),
         at::Complex{real, imag} => format!("{}complexe({}, {})", c_indent, real, imag),
         at::Bytes{elems} => format!("{}", String::from_utf8(elems).expect("Found invalid UTF-8")),
         at::Tuple{elems} => format!("{}", aleph_syntax_tree::gen_list_expr_sep(elems, gen, ",")),
