@@ -55,20 +55,21 @@ fn gen(ast: at, indent: i64) -> String {
         } else {
             format!("{}{}.pop({})",c_indent,array_name, gen(*elem, 0))
         },
-            at::Length{var} => format!("{}len({})", c_indent, var),
-            at::Match{expr, case_list} => format!("{}match {} with\n{}", c_indent, gen(*expr, 0), aleph_syntax_tree::gen_list_expr(case_list, gen)),
-            at::MatchLine{condition, case_expr} => format!("{}: {} -> {}\n", c_indent, gen(*condition, 0), gen(*case_expr, 0)),
-            at::Var{var, is_pointer: _} => format!("{}{}",c_indent, var),
-            at::App{object_name, fun, param_list} => format!("{}{}{}({})",c_indent, (if object_name.ne("") {format!("{}.", object_name)} else {String::from("")}), gen(*fun, 0), aleph_syntax_tree::gen_list_expr(param_list, gen)),
-            at::Stmts{expr1, expr2} => format!("{}\n{}", gen(*expr1, indent), gen(*expr2, indent)),
-            at::Iprt{name} => format!("{}import {}", c_indent, name),
-            at::Clss{name, attribute_list, body} => format!("{}class {} {{\n{}{}\n{}\n}}", c_indent, name, aleph_syntax_tree::comp_indent(indent+1), attribute_list.join(&format!("\n{}", aleph_syntax_tree::comp_indent(indent+1))), gen(*body, indent+1)),
-            at::Return{value} => format!("return {}", gen(*value, 0)),
-            at::Comment{value} => format!("{}{}", c_indent, value),
-            at::CommentMulti{value} => format!("{}{}", c_indent, value),
-            at::Break => format!("{}break", c_indent),
-            at::Continue => format!("{}continue", c_indent),
-            at::Assert {condition, message} => format!("{}assert({}, {})", c_indent, gen(*condition, indent), gen(*message, indent)),
+        at::Length{var} => format!("{}len({})", c_indent, var),
+        at::Match{expr, case_list} => format!("{}match {} with\n{}", c_indent, gen(*expr, 0), aleph_syntax_tree::gen_list_expr(case_list, gen)),
+        at::MatchLine{condition, case_expr} => format!("{}: {} -> {}\n", c_indent, gen(*condition, 0), gen(*case_expr, 0)),
+        at::Var{var, is_pointer: _} => format!("{}{}",c_indent, var),
+        at::App{object_name, fun, param_list} => format!("{}{}{}({})",c_indent, (if object_name.ne("") {format!("{}.", object_name)} else {String::from("")}), gen(*fun, 0), aleph_syntax_tree::gen_list_expr(param_list, gen)),
+        at::Stmts{expr1, expr2} => format!("{}\n{}", gen(*expr1, indent), gen(*expr2, indent)),
+        at::Iprt{name} => format!("{}import {}", c_indent, name),
+        at::Clss{name, attribute_list, body} => format!("{}class {} {{\n{}{}\n{}\n}}", c_indent, name, aleph_syntax_tree::comp_indent(indent+1), attribute_list.join(&format!("\n{}", aleph_syntax_tree::comp_indent(indent+1))), gen(*body, indent+1)),
+        at::Return{value} => format!("return {}", gen(*value, 0)),
+        at::Comment{value} => format!("{}{}", c_indent, value),
+        at::CommentMulti{value} => format!("{}{}", c_indent, value),
+        at::Break => format!("{}break", c_indent),
+        at::Continue => format!("{}continue", c_indent),
+        at::Assert {condition, message} => format!("{}assert({}, {})", c_indent, gen(*condition, indent), gen(*message, indent)),
+        _ => todo!()
     }
 }
 
