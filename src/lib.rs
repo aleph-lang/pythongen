@@ -27,7 +27,7 @@ fn gen(ast: at, indent: i64) -> String {
         at::In{expr1, expr2} => format!("{}{} in {}", c_indent, gen(*expr1, 0), gen(*expr2, 0)),
         at::If{condition, then,els} => match *els {
             at::Unit => format!("{}if({}):\n{}", c_indent, gen(*condition, 0), gen(*then, indent+1)),
-            _ => format!("{}if({}):\n{}\nelse:\n{}", c_indent, gen(*condition, 0), gen(*then, indent+1), gen(*els, indent+1)),
+            _ => format!("{}if({}):\n{}\n{}else:\n{}", c_indent, gen(*condition, 0), gen(*then, indent+1), c_indent, gen(*els, indent+1)),
         },
         at::While{init_expr, condition, loop_expr, post_expr} => match *post_expr{
             at::Unit => format!("{init}\n{id}while({cond}):\n{loop_ex}",init=gen(*init_expr,indent),id=c_indent,cond=gen(*condition, 0),loop_ex=gen(*loop_expr, indent+1)),
@@ -43,7 +43,13 @@ fn gen(ast: at, indent: i64) -> String {
                 _ => format!("{}{} = {}\n{}", c_indent, var, gen(*value, 0), gen(*expr, indent)),
             }
         },
-        at::LetRec{name, args, body} => format!("{}def {}({}):\n{}\n", c_indent, name, aleph_syntax_tree::gen_list_expr_sep(args, gen, ", "), gen(*body, indent+1)),
+        at::LetRec{name, args, body} => {
+            let body_with_return = match &*body {
+                at::Stmts{..} => format!("{}\n{}return", gen(*body, indent+1), aleph_syntax_tree::comp_indent(indent+1)),
+                _ => format!("{}return {}", aleph_syntax_tree::comp_indent(indent+1), gen(*body, 0)),
+            };
+            format!("{}def {}({}):\n{}\n", c_indent, name, aleph_syntax_tree::gen_list_expr_sep(args, gen, ", "), body_with_return)
+        },
         at::Get{array_name, elem} => format!("{}{}[{}]", c_indent, array_name, gen(*elem, 0)),
         at::Put{array_name, elem, value, insert} => if insert.eq("true") {
             format!("{}{}.insert({},{})", c_indent, array_name, gen(*elem, 0), gen(*value, 0))
