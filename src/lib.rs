@@ -92,7 +92,13 @@ fn gen(ast: at, indent: i64) -> String {
         at::Break => format!("{}break", c_indent),
         at::Continue => format!("{}continue", c_indent),
         at::Assert {condition, message} => format!("{}assert({}, {})", c_indent, gen(*condition, indent), gen(*message, indent)),
-        _ => todo!()
+        // Cognitive layer — no Python equivalent yet, emit a comment
+        at::Intend{name, ..}   => format!("{}# intention {}", c_indent, name),
+        at::Suggest{var, ..}   => format!("{}# suggest {}", c_indent, var),
+        at::Act{intention, ..} => format!("{}# act {}", c_indent, gen(*intention, 0)),
+        at::Remember{key, ..}  => format!("{}# remember {}", c_indent, gen(*key, 0)),
+        at::Perceive{var, ..}  => format!("{}# perceive {:?}", c_indent, var),
+        _ => String::new()
     }
 }
 
