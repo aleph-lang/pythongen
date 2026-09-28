@@ -1,5 +1,25 @@
 use aleph_syntax_tree::syntax::AlephTree as at;
 
+/// Generates an `If`/`LetRec` branch's tail node. Statement-like nodes
+/// (control flow, assignment, sequencing, side-effecting ops) already emit
+/// a complete, self-contained line and are recursed into as-is; anything
+/// else is a bare expression and needs an explicit `return` to actually
+/// produce Python with the same semantics as the Aleph source. The
+/// previous implementation allow-listed only `Var`/`Int`/`App`/`Ident` as
+/// return-worthy, silently dropping `return` for every binary/unary
+/// operator (`Mul`, `Add`, `Not`, ...) and every other literal type
+/// (`Float`, `Bool`, `String`, ...) — e.g. `factorial(n-1) * n` as an
+/// `else` branch compiled to valid Python that always returned `None`.
+fn branch_gen(node: at, indent: i64) -> String {
+    match &node {
+        at::If{..} | at::While{..} | at::Stmts{..} | at::Let{..} | at::LetRec{..}
+        | at::Put{..} | at::Remove{..} | at::Match{..} | at::Iprt{..} | at::Clss{..}
+        | at::Return{..} | at::Comment{..} | at::CommentMulti{..} | at::Break | at::Continue
+        | at::Assert{..} | at::Unit => gen(node, indent + 1),
+        _ => format!("{}return {}", aleph_syntax_tree::comp_indent(indent + 1), gen(node, 0)),
+    }
+}
+
 fn gen(ast: at, indent: i64) -> String {
     let c_indent=aleph_syntax_tree::comp_indent(indent);
     match ast {
@@ -28,14 +48,8 @@ fn gen(ast: at, indent: i64) -> String {
         at::If{condition, then, els} => match *els {
             at::Unit => format!("{}if({}):\n{}", c_indent, gen(*condition, 0), gen(*then, indent+1)),
             _ => {
-                let then_return = match then.as_ref() {
-                    at::Var{..} | at::Int{..} | at::App{..} | at::Ident{..} => format!("{}return {}", aleph_syntax_tree::comp_indent(indent+1), gen(*then, 0)),
-                    _ => gen(*then, indent+1),
-                };
-                let else_return = match els.as_ref() {
-                    at::Var{..} | at::Int{..} | at::App{..} | at::Ident{..} => format!("{}return {}", aleph_syntax_tree::comp_indent(indent+1), gen(*els, 0)),
-                    _ => gen(*els, indent+1),
-                };
+                let then_return = branch_gen(*then, indent);
+                let else_return = branch_gen(*els, indent);
                 format!("{}if({}):\n{}\n{}else:\n{}", c_indent, gen(*condition, 0), then_return, c_indent, else_return)
             },
         },
@@ -104,4 +118,83 @@ fn gen(ast: at, indent: i64) -> String {
 
 pub fn generate(ast: at) -> String {
     gen(ast, 0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aleph_syntax_tree::syntax::AlephTree as at;
+
+    fn wrapped_in_if_else(else_branch: at) -> at {
+        at::LetRec {
+            name: "f".to_string(),
+            args: vec![Box::new(at::Ident { value: "n".to_string() })],
+            body: Box::new(at::If {
+                condition: Box::new(at::LE {
+                    expr1: Box::new(at::Ident { value: "n".to_string() }),
+                    expr2: Box::new(at::Int { value: "1".to_string() }),
+                }),
+                then: Box::new(at::Int { value: "1".to_string() }),
+                els: Box::new(else_branch),
+            }),
+        }
+    }
+
+    #[test]
+    fn if_else_branch_that_is_a_binary_op_gets_a_return() {
+        // Regression test for the bug this fix closes: `factorial(n-1) * n`
+        // as an else branch used to compile to Python that silently
+        // dropped the `return`, so the function always returned `None`.
+        let node = wrapped_in_if_else(at::Mul {
+            number_expr1: Box::new(at::App {
+                object_name: "".to_string(),
+                fun: Box::new(at::Ident { value: "f".to_string() }),
+                param_list: vec![Box::new(at::Sub {
+                    number_expr1: Box::new(at::Ident { value: "n".to_string() }),
+                    number_expr2: Box::new(at::Int { value: "1".to_string() }),
+                })],
+            }),
+            number_expr2: Box::new(at::Ident { value: "n".to_string() }),
+        });
+        let out = generate(node);
+        assert!(out.contains("return f(n - 1) * n"), "{}", out);
+    }
+
+    #[test]
+    fn if_else_branch_that_is_an_add_gets_a_return() {
+        let node = wrapped_in_if_else(at::Add {
+            number_expr1: Box::new(at::Ident { value: "n".to_string() }),
+            number_expr2: Box::new(at::Ident { value: "n".to_string() }),
+        });
+        let out = generate(node);
+        assert!(out.contains("return n + n"), "{}", out);
+    }
+
+    #[test]
+    fn if_else_branch_that_is_a_bare_app_still_gets_a_return() {
+        // Confirms the fix didn't regress the one case the old allow-list
+        // already handled correctly.
+        let node = wrapped_in_if_else(at::App {
+            object_name: "".to_string(),
+            fun: Box::new(at::Ident { value: "f".to_string() }),
+            param_list: vec![Box::new(at::Ident { value: "n".to_string() })],
+        });
+        let out = generate(node);
+        assert!(out.contains("return f(n)"), "{}", out);
+    }
+
+    #[test]
+    fn if_else_branch_that_is_a_put_is_not_wrapped_in_a_return() {
+        // A statement-like branch (assignment into an array) is already a
+        // complete line and must not be prefixed with `return`.
+        let node = wrapped_in_if_else(at::Put {
+            array_name: "res".to_string(),
+            elem: Box::new(at::Int { value: "0".to_string() }),
+            value: Box::new(at::Ident { value: "n".to_string() }),
+            insert: "false".to_string(),
+        });
+        let out = generate(node);
+        assert!(!out.contains("return res"), "{}", out);
+        assert!(out.contains("res[0] = n"), "{}", out);
+    }
 }
